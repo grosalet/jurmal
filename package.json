@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "build:cf": "npx shadcn@latest add @uiarc/alert @uiarc/avatar @uiarc/badge @uiarc/button @uiarc/checkbox @uiarc/confirm-morph @uiarc/date-picker @uiarc/dialog @uiarc/drawer @uiarc/empty-state @uiarc/input @uiarc/password-field @uiarc/radio-group @uiarc/segmented-control @uiarc/select @uiarc/skeleton @uiarc/textarea --yes --overwrite && vite build"
+    "build:cf": "npx shadcn@latest add https://uiarc.dev/r/alert.json https://uiarc.dev/r/avatar.json https://uiarc.dev/r/badge.json https://uiarc.dev/r/button.json https://uiarc.dev/r/checkbox.json https://uiarc.dev/r/confirm-morph.json https://uiarc.dev/r/date-picker.json https://uiarc.dev/r/dialog.json https://uiarc.dev/r/drawer.json https://uiarc.dev/r/empty-state.json https://uiarc.dev/r/input.json https://uiarc.dev/r/password-field.json https://uiarc.dev/r/radio-group.json https://uiarc.dev/r/segmented-control.json https://uiarc.dev/r/select.json https://uiarc.dev/r/skeleton.json https://uiarc.dev/r/textarea.json https://uiarc.dev/r/arc-foundation.json --yes --overwrite && vite build"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.1.0",
