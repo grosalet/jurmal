@@ -194,19 +194,25 @@ function Detail({ siswa, tanggal, user, onSaved }: { siswa: Row; tanggal: Date; 
       </div>
       <div className={s.detailBody}>
         <h4 className={s.h3}>Rincian jawaban jurnal</h4>
-        {keys.length === 0 ? <p className={s.muted}>Data jawaban kosong.</p> : keys.map((k, i) => (
-          <div key={k} className={s.answer}>
-            <small>{i + 1}. Field ID: {k}</small>
-            {answers[k] === "YA" ? <Badge tone="success">YA</Badge> : answers[k] === "TIDAK" ? <Badge tone="danger">TIDAK</Badge> : <span>{answers[k]}</span>}
+        {keys.length === 0 ? <p className={s.muted}>Data jawaban kosong.</p> : (
+          <div className={s.answersGrid}>
+            {keys.map((k, i) => (
+              <div key={k} className={s.answer}>
+                <small>{i + 1}. Field ID: {k}</small>
+                {answers[k] === "YA" ? <Badge tone="success">YA</Badge> : answers[k] === "TIDAK" ? <Badge tone="danger">TIDAK</Badge> : <span>{answers[k]}</span>}
+              </div>
+            ))}
           </div>
-        ))}
-        <form className={s.stack} onSubmit={send}>
-          <h4 className={s.h3}>Berikan umpan balik dan apresiasi</h4>
-          <RadioGroup label="Lencana" name="fb-badge" value={badge} onValueChange={setBadge} options={[{ value: "⭐ Bintang Emas", label: "⭐ Bintang Emas" }, { value: "👍 Jempol Super", label: "👍 Jempol Super" }]} />
-          <Textarea label="Catatan motivasi" rows={2} required value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Tuliskan apresiasi atau catatan..." />
-          <Button type="submit" loading={busy}>Simpan umpan balik</Button>
-        </form>
+        )}
       </div>
+      <form className={s.feedbackBar} onSubmit={send}>
+        <div className={s.feedbackTop}>
+          <h4 className={s.h3}>Umpan balik</h4>
+          <RadioGroup label="Lencana" name="fb-badge" value={badge} onValueChange={setBadge} options={[{ value: "⭐ Bintang Emas", label: "⭐ Bintang Emas" }, { value: "👍 Jempol Super", label: "👍 Jempol Super" }]} />
+        </div>
+        <Textarea label="Catatan motivasi" rows={2} required value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Tuliskan apresiasi atau catatan..." />
+        <div><Button type="submit" loading={busy}>Simpan umpan balik</Button></div>
+      </form>
     </>
   );
 }
@@ -223,6 +229,8 @@ function Guru({ user }: { user: User }) {
   const [builder, setBuilder] = useState(false);
   const [cetak, setCetak] = useState({ id: "", start: new Date(), end: new Date() });
   const [print, setPrint] = useState<PrintData | null>(null);
+  const [search, setSearch] = useState("");
+  const [printOpen, setPrintOpen] = useState(false);
 
   const loadSchema = useCallback(async () => {
     try { setSchema((await sbFetch(`form_kustom_guru?GuruID=eq.${q(user.UserID)}&order=Urutan.asc,id.asc&select=*`)) || []); }
@@ -245,7 +253,8 @@ function Guru({ user }: { user: User }) {
 
   const sudah = cache.filter((x) => x.sudahIsi).length;
   const belum = cache.length - sudah;
-  const list = filter === "sudah" ? cache.filter((x) => x.sudahIsi) : filter === "belum" ? cache.filter((x) => !x.sudahIsi) : cache;
+  const kw = search.trim().toLowerCase();
+  const list = (filter === "sudah" ? cache.filter((x) => x.sudahIsi) : filter === "belum" ? cache.filter((x) => !x.sudahIsi) : cache).filter((x) => !kw || x.Nama.toLowerCase().includes(kw));
   const selected = cache.find((x) => x.UserID === active);
 
   async function cetakLaporan() {
@@ -254,40 +263,36 @@ function Guru({ user }: { user: User }) {
     try {
       const rows = await sbFetch(`jurnal_siswa?UserID=eq.${cetak.id}&Tanggal=gte.${start}&Tanggal=lte.${end}&order=Tanggal.asc&select=*`);
       const sw = cache.find((x) => x.UserID === cetak.id);
-      flushSync(() => setPrint({ nama: sw ? sw.Nama : cetak.id, kelas: sw ? sw.Kelas || "-" : "-", start, end, rows: rows || [] }));
+      flushSync(() => { setPrintOpen(false); setPrint({ nama: sw ? sw.Nama : cetak.id, kelas: sw ? sw.Kelas || "-" : "-", start, end, rows: rows || [] }); });
       window.print();
     } catch (err) { notify("Gagal", msg(err), "error"); }
   }
 
-  const notif = belum > 0 ? { tone: "warning" as const, t: `Terdapat ${belum} siswa binaan belum mengisi jurnal hari ini.` }
-    : cache.length > 0 ? { tone: "success" as const, t: "Luar biasa! Seluruh siswa binaan telah mengisi jurnal." }
-    : { tone: "info" as const, t: "Belum ada siswa binaan yang terdaftar di bawah akun Anda." };
-
   return (
     <>
-      <section className={s.group}>
-        <div className={s.banner}>
-          <div className={s.bannerText}>
-            <h2 className={s.h2}>Selamat datang, {user.Nama}!</h2>
-            {loading ? <Skeleton lines={1} label="Memuat data siswa binaan" /> : <Alert tone={notif.tone} title={notif.t} />}
-            <SegmentedControl label="Filter siswa binaan" value={filter} onValueChange={setFilter} options={[
-              { value: "all", label: "Total binaan", accessory: <Badge size="sm">{cache.length}</Badge> },
-              { value: "sudah", label: "Sudah mengisi", accessory: <Badge size="sm" tone="success">{sudah}</Badge> },
-              { value: "belum", label: "Belum mengisi", accessory: <Badge size="sm" tone="warning">{belum}</Badge> }]} />
-          </div>
-          <div className={s.tools}>
-            <DatePicker label="Tanggal pantau" locale="id-ID" value={tanggal} onChange={(d) => d && setTanggal(d)} />
-            <Button variant="ghost" aria-label="Segarkan data" onClick={load}><RefreshCw size={16} strokeWidth={1.75} aria-hidden /></Button>
-            <Button variant="secondary" onClick={() => setBuilder(true)}><Settings2 size={16} strokeWidth={1.75} aria-hidden /> Atur form siswa binaan</Button>
-          </div>
+      <section className={s.toolbar}>
+        <div className={s.toolbarTitle}>
+          <h2 className={s.h2}>Selamat datang, {user.Nama}</h2>
+          <p className={s.muted}>{loading ? "Memuat data siswa binaan..." : `${sudah} dari ${cache.length} siswa binaan sudah mengisi jurnal`}</p>
+        </div>
+        <div className={s.toolbarActions}>
+          <DatePicker label="Tanggal pantau" locale="id-ID" value={tanggal} onChange={(d) => d && setTanggal(d)} />
+          <Button variant="ghost" aria-label="Segarkan data" onClick={load}><RefreshCw size={16} strokeWidth={1.75} aria-hidden /></Button>
+          <Button variant="secondary" onClick={() => setPrintOpen(true)}><Printer size={16} strokeWidth={1.75} aria-hidden /> Cetak rekap</Button>
+          <Button variant="secondary" onClick={() => setBuilder(true)}><Settings2 size={16} strokeWidth={1.75} aria-hidden /> Atur form</Button>
         </div>
       </section>
 
-      <section className={s.master}>
+      <SegmentedControl label="Filter siswa binaan" value={filter} onValueChange={setFilter} options={[
+        { value: "all", label: "Semua", accessory: <Badge size="sm">{cache.length}</Badge> },
+        { value: "sudah", label: "Sudah mengisi", accessory: <Badge size="sm" tone="success">{sudah}</Badge> },
+        { value: "belum", label: "Belum mengisi", accessory: <Badge size="sm" tone="warning">{belum}</Badge> }]} />
+
+      <section className={s.workspace}>
         <article className={s.panel}>
-          <div className={s.panelHead}><h3 className={s.h3}>Siswa binaan saya</h3><span className={s.muted}>{list.length} siswa</span></div>
+          <div className={s.searchBox}><Input label="Cari siswa" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik nama siswa" /></div>
           <div className={s.panelBody} aria-busy={loading}>
-            {list.length === 0 ? <EmptyState title="Tidak ada data" description="Tidak ada data pada filter ini." /> : list.map((x) => (
+            {loading ? <Skeleton lines={4} label="Memuat siswa binaan" /> : list.length === 0 ? <EmptyState title="Tidak ada data" description="Tidak ada siswa yang cocok dengan filter ini." /> : list.map((x) => (
               <button key={x.UserID} type="button" aria-pressed={active === x.UserID} className={`${s.row} ${active === x.UserID ? s.rowActive : ""}`} onClick={() => setActive(x.UserID)}>
                 <Avatar name={x.Nama} size="sm" />
                 <span className={s.rowText}><span>{x.Nama}</span><small>{x.Kelas || "-"}</small></span>
@@ -299,22 +304,20 @@ function Guru({ user }: { user: User }) {
         </article>
         <article className={s.panel}>
           {selected ? <Detail key={selected.UserID + String(selected.sudahIsi)} siswa={selected} tanggal={tanggal} user={user} onSaved={async () => { const id = selected.UserID; await load(); setActive(id); }} />
-            : <div className={s.empty}><EmptyState title="Pilih siswa binaan" description="Klik salah satu nama siswa di sebelah kiri untuk memeriksa jurnal dan memberikan umpan balik." /></div>}
+            : <div className={s.empty}><EmptyState title="Pilih siswa binaan" description="Klik nama siswa di sebelah kiri untuk memeriksa jurnal dan memberi umpan balik." /></div>}
         </article>
       </section>
 
-      <section className={s.group}>
-        <div>
-          <h3 className={s.h3}>Cetak rekapitulasi jurnal siswa binaan</h3>
-          <p className={s.muted}>Pilih siswa dan rentang tanggal untuk mencetak laporan resmi.</p>
-        </div>
-        <div className={s.formGrid}>
-          <Select label="Siswa" placeholder="Pilih siswa binaan" value={cetak.id} onValueChange={(v) => setCetak({ ...cetak, id: v })} options={cache.map((x) => ({ value: x.UserID, label: `${x.Nama} (${x.Kelas})` }))} />
-          <DatePicker label="Mulai tanggal" locale="id-ID" value={cetak.start} onChange={(d) => d && setCetak({ ...cetak, start: d })} />
-          <DatePicker label="Sampai tanggal" locale="id-ID" value={cetak.end} onChange={(d) => d && setCetak({ ...cetak, end: d })} />
-        </div>
-        <div><Button variant="secondary" onClick={cetakLaporan}><Printer size={16} strokeWidth={1.75} aria-hidden /> Cetak dokumen PDF</Button></div>
-      </section>
+      <Drawer open={printOpen} onOpenChange={setPrintOpen}>
+        <DrawerContent title="Cetak rekap jurnal" description="Pilih siswa dan rentang tanggal untuk mencetak laporan.">
+          <div className={s.stack}>
+            <Select label="Siswa" placeholder="Pilih siswa binaan" value={cetak.id} onValueChange={(v) => setCetak({ ...cetak, id: v })} options={cache.map((x) => ({ value: x.UserID, label: `${x.Nama} (${x.Kelas})` }))} />
+            <DatePicker label="Mulai tanggal" locale="id-ID" value={cetak.start} onChange={(d) => d && setCetak({ ...cetak, start: d })} />
+            <DatePicker label="Sampai tanggal" locale="id-ID" value={cetak.end} onChange={(d) => d && setCetak({ ...cetak, end: d })} />
+            <Button onClick={cetakLaporan}><Printer size={16} strokeWidth={1.75} aria-hidden /> Cetak laporan</Button>
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <FormBuilder open={builder} onOpenChange={(o) => { setBuilder(o); if (!o) loadSchema(); }} user={user} schema={schema} reload={loadSchema} />
       {print && createPortal(
