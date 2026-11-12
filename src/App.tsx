@@ -154,7 +154,7 @@ function FormBuilder({ open, onOpenChange, user, schema, reload }: { open: boole
 }
 
 /* ---------- Detail jurnal + umpan balik ---------- */
-function Detail({ siswa, tanggal, user, onSaved }: { siswa: Row; tanggal: Date; user: User; onSaved: () => Promise<void> }) {
+function Detail({ siswa, tanggal, user, schema, onSaved }: { schema: Field[]; siswa: Row; tanggal: Date; user: User; onSaved: () => Promise<void> }) {
   const notify = useNotify();
   const [badge, setBadge] = useState(siswa.feedbackData?.badge || "⭐ Bintang Emas");
   const [catatan, setCatatan] = useState(siswa.feedbackData?.catatan || "");
@@ -179,7 +179,9 @@ function Detail({ siswa, tanggal, user, onSaved }: { siswa: Row; tanggal: Date; 
 
   if (!siswa.sudahIsi) return <div className={s.empty}><EmptyState title="Belum mengisi jurnal" description={`Siswa ${siswa.Nama} belum menyerahkan laporan jurnal pada tanggal terpilih.`} /></div>;
   const answers = siswa.jurnalData || {};
-  const keys = Object.keys(answers);
+  const label = (k: string) => schema.find((f) => f.FieldID === k)?.Label ?? "Pertanyaan yang sudah dihapus";
+  const order = (k: string) => { const i = schema.findIndex((f) => f.FieldID === k); return i < 0 ? 999 : i; };
+  const keys = Object.keys(answers).sort((x, y) => order(x) - order(y));
   return (
     <>
       <div className={s.panelHead}>
@@ -193,12 +195,11 @@ function Detail({ siswa, tanggal, user, onSaved }: { siswa: Row; tanggal: Date; 
         <Badge tone="success" dot>Sudah mengisi</Badge>
       </div>
       <div className={s.detailBody}>
-        <h4 className={s.h3}>Rincian jawaban jurnal</h4>
         {keys.length === 0 ? <p className={s.muted}>Data jawaban kosong.</p> : (
           <div className={s.answersGrid}>
             {keys.map((k, i) => (
               <div key={k} className={s.answer}>
-                <small>{i + 1}. Field ID: {k}</small>
+                <small>{i + 1}. {label(k)}</small>
                 {answers[k] === "YA" ? <Badge tone="success">YA</Badge> : answers[k] === "TIDAK" ? <Badge tone="danger">TIDAK</Badge> : <span>{answers[k]}</span>}
               </div>
             ))}
@@ -208,10 +209,12 @@ function Detail({ siswa, tanggal, user, onSaved }: { siswa: Row; tanggal: Date; 
       <form className={s.feedbackBar} onSubmit={send}>
         <div className={s.feedbackTop}>
           <h4 className={s.h3}>Umpan balik</h4>
-          <RadioGroup label="Lencana" name="fb-badge" value={badge} onValueChange={setBadge} options={[{ value: "⭐ Bintang Emas", label: "⭐ Bintang Emas" }, { value: "👍 Jempol Super", label: "👍 Jempol Super" }]} />
+          <SegmentedControl label="Lencana" value={badge} onValueChange={setBadge} options={[{ value: "⭐ Bintang Emas", label: "⭐ Bintang Emas" }, { value: "👍 Jempol Super", label: "👍 Jempol Super" }]} />
         </div>
-        <Textarea label="Catatan motivasi" rows={2} required value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Tuliskan apresiasi atau catatan..." />
-        <div><Button type="submit" loading={busy}>Simpan umpan balik</Button></div>
+        <div className={s.feedbackRow}>
+          <Textarea label="Catatan motivasi" rows={2} required value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Tuliskan apresiasi atau catatan..." />
+          <Button type="submit" loading={busy}>Simpan umpan balik</Button>
+        </div>
       </form>
     </>
   );
@@ -263,7 +266,7 @@ function Guru({ user }: { user: User }) {
     try {
       const rows = await sbFetch(`jurnal_siswa?UserID=eq.${cetak.id}&Tanggal=gte.${start}&Tanggal=lte.${end}&order=Tanggal.asc&select=*`);
       const sw = cache.find((x) => x.UserID === cetak.id);
-      flushSync(() => { setPrintOpen(false); setPrint({ nama: sw ? sw.Nama : cetak.id, kelas: sw ? sw.Kelas || "-" : "-", start, end, rows: rows || [] }); });
+      flushSync(() => { setPrintOpen(false); setPrint({ nama: sw ? sw.Nama : cetak.id, kelas: sw ? sw.Kelas || "-" : "-", start, end, rows: (rows || []).map((r: any) => ({ ...r, Answers: Object.fromEntries(Object.entries(r.Answers || {}).map(([k, v]) => [schema.find((f) => f.FieldID === k)?.Label ?? k, v])) })) }); });
       window.print();
     } catch (err) { notify("Gagal", msg(err), "error"); }
   }
@@ -303,7 +306,7 @@ function Guru({ user }: { user: User }) {
           </div>
         </article>
         <article className={s.panel}>
-          {selected ? <Detail key={selected.UserID + String(selected.sudahIsi)} siswa={selected} tanggal={tanggal} user={user} onSaved={async () => { const id = selected.UserID; await load(); setActive(id); }} />
+          {selected ? <Detail schema={schema} key={selected.UserID + String(selected.sudahIsi)} siswa={selected} tanggal={tanggal} user={user} onSaved={async () => { const id = selected.UserID; await load(); setActive(id); }} />
             : <div className={s.empty}><EmptyState title="Pilih siswa binaan" description="Klik nama siswa di sebelah kiri untuk memeriksa jurnal dan memberi umpan balik." /></div>}
         </article>
       </section>
