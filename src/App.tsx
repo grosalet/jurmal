@@ -12,6 +12,9 @@ import { Dialog, DialogContent } from "@/components/arc/dialog/dialog";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/arc/drawer/drawer";
 import { EmptyState } from "@/components/arc/empty-state/empty-state";
 import { Input } from "@/components/arc/input/input";
+import { MetricCard } from "@/components/arc/metric-card/metric-card";
+import { Progress } from "@/components/arc/progress/progress";
+import { SearchField } from "@/components/arc/search-field/search-field";
 import { PasswordField } from "@/components/arc/password-field/password-field";
 import { RadioGroup } from "@/components/arc/radio-group/radio-group";
 import SegmentedControl from "@/components/arc/segmented-control/segmented-control";
@@ -288,7 +291,7 @@ function Guru({ user }: { user: User }) {
         <div className={s.heroMain}>
           <h2 className={s.h2}>Selamat datang, {user.Nama}</h2>
           <p className={s.muted}>{loading ? "Memuat data siswa binaan..." : `${sudah} dari ${cache.length} siswa binaan sudah mengisi jurnal (${pct}%)`}</p>
-          <div className={s.progress} role="progressbar" aria-label="Progres pengisian jurnal" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><span style={{ width: `${pct}%` }} /></div>
+          <div className={s.progressWrap}><Progress label="Progres pengisian jurnal" value={sudah} max={Math.max(cache.length, 1)} showValue /></div>
         </div>
         <div className={s.toolbarActions}>
           <DatePicker label="Tanggal pantau" locale="id-ID" value={tanggal} onChange={(d) => d && setTanggal(d)} />
@@ -298,14 +301,20 @@ function Guru({ user }: { user: User }) {
         </div>
       </section>
 
+      <section className={s.metrics} aria-label="Ringkasan jurnal hari ini">
+        <MetricCard label="Total binaan" value={cache.length} suffix=" siswa" context="Siswa binaan aktif" />
+        <MetricCard label="Sudah mengisi" value={sudah} suffix=" siswa" context={`${pct}% dari total binaan`} />
+        <MetricCard label="Belum mengisi" value={belum} suffix=" siswa" context="Perlu diingatkan" />
+      </section>
+
       <SegmentedControl label="Filter siswa binaan" value={filter} onValueChange={setFilter} options={[
-        { value: "all", label: "Semua", accessory: <Badge size="sm">{cache.length}</Badge> },
-        { value: "sudah", label: "Sudah mengisi", accessory: <Badge size="sm" tone="success">{sudah}</Badge> },
-        { value: "belum", label: "Belum mengisi", accessory: <Badge size="sm" tone="warning">{belum}</Badge> }]} />
+        { value: "all", label: "Semua" },
+        { value: "sudah", label: "Sudah mengisi" },
+        { value: "belum", label: "Belum mengisi" }]} />
 
       <section className={s.workspace}>
         <article className={s.panel}>
-          <div className={s.searchBox}><Input label="Cari siswa" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik nama siswa" /></div>
+          <div className={s.searchBox}><SearchField label="Cari siswa" placeholder="Ketik nama siswa" value={search} onValueChange={setSearch} /></div>
           <div className={s.panelBody} aria-busy={loading}>
             {loading ? <Skeleton lines={4} label="Memuat siswa binaan" /> : list.length === 0 ? <EmptyState title="Tidak ada data" description="Tidak ada siswa yang cocok dengan filter ini." /> : list.map((x) => (
               <button key={x.UserID} type="button" aria-pressed={active === x.UserID} className={`${s.row} ${active === x.UserID ? s.rowActive : ""}`} onClick={() => setActive(x.UserID)}>

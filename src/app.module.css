@@ -91,3 +91,9 @@
 @media (prefers-reduced-motion: reduce) { .progress > span { transition: none; } }
 .panel { border-radius: var(--radius-panel); }
 .navBtns { display: flex; align-items: center; gap: 4px; }
+
+/* Dasbor gaya Arc: kartu metrik dan progres */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: stretch; }
+.progressWrap { max-width: 420px; }
+.workspace { height: max(560px, calc(100vh - 380px)); }
+@media (max-width: 900px) { .workspace { height: auto; } }
