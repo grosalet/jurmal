@@ -82,3 +82,12 @@
   .workspace { grid-template-columns: minmax(0, 1fr); height: auto; }
   .feedbackRow { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Konsep dasbor: kartu ringkasan, progres, navigasi siswa */
+.hero { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-panel); }
+.heroMain { display: grid; gap: 6px; flex: 1 1 320px; min-width: 0; }
+.progress { height: 8px; max-width: 420px; border-radius: var(--radius-pill); background: var(--accent-subtle); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width 0.4s ease; }
+@media (prefers-reduced-motion: reduce) { .progress > span { transition: none; } }
+.panel { border-radius: var(--radius-panel); }
+.navBtns { display: flex; align-items: center; gap: 4px; }

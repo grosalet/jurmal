@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { LogOut, Printer, RefreshCw, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, Printer, RefreshCw, Settings2 } from "lucide-react";
 import { Alert } from "@/components/arc/alert/alert";
 import { Avatar } from "@/components/arc/avatar/avatar";
 import { Badge } from "@/components/arc/badge/badge";
@@ -38,6 +38,7 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 type User = { UserID: string; Nama: string; Kelas?: string; Role: string; ID_Guru_Pengampu?: string };
 type Field = { id: number; FieldID: string; Label: string; Type: string; Options: string | null };
 type Row = User & { sudahIsi: boolean; jurnalData: Record<string, string> | null; feedbackData: { badge?: string; catatan?: string } | null };
+type Nav = { prev?: string; next?: string; go: (id: string) => void };
 type PrintData = { nama: string; kelas: string; start: string; end: string; rows: any[] };
 
 /* ---------- Dialog notifikasi ---------- */
@@ -154,7 +155,7 @@ function FormBuilder({ open, onOpenChange, user, schema, reload }: { open: boole
 }
 
 /* ---------- Detail jurnal + umpan balik ---------- */
-function Detail({ siswa, tanggal, user, schema, onSaved }: { schema: Field[]; siswa: Row; tanggal: Date; user: User; onSaved: () => Promise<void> }) {
+function Detail({ siswa, tanggal, user, schema, nav, onSaved }: { nav: Nav; schema: Field[]; siswa: Row; tanggal: Date; user: User; onSaved: () => Promise<void> }) {
   const notify = useNotify();
   const [badge, setBadge] = useState(siswa.feedbackData?.badge || "⭐ Bintang Emas");
   const [catatan, setCatatan] = useState(siswa.feedbackData?.catatan || "");
@@ -177,23 +178,30 @@ function Detail({ siswa, tanggal, user, schema, onSaved }: { schema: Field[]; si
     } catch (err) { notify("Gagal", msg(err), "error"); } finally { setBusy(false); }
   }
 
-  if (!siswa.sudahIsi) return <div className={s.empty}><EmptyState title="Belum mengisi jurnal" description={`Siswa ${siswa.Nama} belum menyerahkan laporan jurnal pada tanggal terpilih.`} /></div>;
+  const head = (
+    <div className={s.panelHead}>
+      <div className={s.row2}>
+        <Avatar name={siswa.Nama} />
+        <div>
+          <h3 className={s.h3}>{siswa.Nama}</h3>
+          <p className={s.muted}>ID: {siswa.UserID} | Kelas: {siswa.Kelas}</p>
+        </div>
+      </div>
+      <div className={s.navBtns}>
+        <Badge tone={siswa.sudahIsi ? "success" : "warning"} dot>{siswa.sudahIsi ? "Sudah mengisi" : "Belum mengisi"}</Badge>
+        <Button variant="ghost" aria-label="Siswa sebelumnya" disabled={!nav.prev} onClick={() => nav.prev && nav.go(nav.prev)}><ChevronLeft size={16} strokeWidth={1.75} aria-hidden /></Button>
+        <Button variant="ghost" aria-label="Siswa berikutnya" disabled={!nav.next} onClick={() => nav.next && nav.go(nav.next)}><ChevronRight size={16} strokeWidth={1.75} aria-hidden /></Button>
+      </div>
+    </div>
+  );
+  if (!siswa.sudahIsi) return <>{head}<div className={s.empty}><EmptyState title="Belum mengisi jurnal" description={`Siswa ${siswa.Nama} belum menyerahkan laporan jurnal pada tanggal terpilih.`} /></div></>;
   const answers = siswa.jurnalData || {};
   const label = (k: string) => schema.find((f) => f.FieldID === k)?.Label ?? "Pertanyaan yang sudah dihapus";
   const order = (k: string) => { const i = schema.findIndex((f) => f.FieldID === k); return i < 0 ? 999 : i; };
   const keys = Object.keys(answers).sort((x, y) => order(x) - order(y));
   return (
     <>
-      <div className={s.panelHead}>
-        <div className={s.row2}>
-          <Avatar name={siswa.Nama} />
-          <div>
-            <h3 className={s.h3}>{siswa.Nama}</h3>
-            <p className={s.muted}>ID: {siswa.UserID} | Kelas: {siswa.Kelas}</p>
-          </div>
-        </div>
-        <Badge tone="success" dot>Sudah mengisi</Badge>
-      </div>
+      {head}
       <div className={s.detailBody}>
         {keys.length === 0 ? <p className={s.muted}>Data jawaban kosong.</p> : (
           <div className={s.answersGrid}>
@@ -256,9 +264,12 @@ function Guru({ user }: { user: User }) {
 
   const sudah = cache.filter((x) => x.sudahIsi).length;
   const belum = cache.length - sudah;
+  const pct = cache.length ? Math.round((sudah / cache.length) * 100) : 0;
   const kw = search.trim().toLowerCase();
   const list = (filter === "sudah" ? cache.filter((x) => x.sudahIsi) : filter === "belum" ? cache.filter((x) => !x.sudahIsi) : cache).filter((x) => !kw || x.Nama.toLowerCase().includes(kw));
   const selected = cache.find((x) => x.UserID === active);
+  const idx = list.findIndex((x) => x.UserID === active);
+  const nav: Nav = { prev: idx > 0 ? list[idx - 1].UserID : undefined, next: idx >= 0 && idx < list.length - 1 ? list[idx + 1].UserID : undefined, go: setActive };
 
   async function cetakLaporan() {
     if (!cetak.id) { notify("Peringatan", "Pilih siswa binaan terlebih dahulu.", "error"); return; }
@@ -273,10 +284,11 @@ function Guru({ user }: { user: User }) {
 
   return (
     <>
-      <section className={s.toolbar}>
-        <div className={s.toolbarTitle}>
+      <section className={s.hero}>
+        <div className={s.heroMain}>
           <h2 className={s.h2}>Selamat datang, {user.Nama}</h2>
-          <p className={s.muted}>{loading ? "Memuat data siswa binaan..." : `${sudah} dari ${cache.length} siswa binaan sudah mengisi jurnal`}</p>
+          <p className={s.muted}>{loading ? "Memuat data siswa binaan..." : `${sudah} dari ${cache.length} siswa binaan sudah mengisi jurnal (${pct}%)`}</p>
+          <div className={s.progress} role="progressbar" aria-label="Progres pengisian jurnal" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><span style={{ width: `${pct}%` }} /></div>
         </div>
         <div className={s.toolbarActions}>
           <DatePicker label="Tanggal pantau" locale="id-ID" value={tanggal} onChange={(d) => d && setTanggal(d)} />
@@ -306,7 +318,7 @@ function Guru({ user }: { user: User }) {
           </div>
         </article>
         <article className={s.panel}>
-          {selected ? <Detail schema={schema} key={selected.UserID + String(selected.sudahIsi)} siswa={selected} tanggal={tanggal} user={user} onSaved={async () => { const id = selected.UserID; await load(); setActive(id); }} />
+          {selected ? <Detail nav={nav} schema={schema} key={selected.UserID + String(selected.sudahIsi)} siswa={selected} tanggal={tanggal} user={user} onSaved={async () => { const id = selected.UserID; await load(); setActive(id); }} />
             : <div className={s.empty}><EmptyState title="Pilih siswa binaan" description="Klik nama siswa di sebelah kiri untuk memeriksa jurnal dan memberi umpan balik." /></div>}
         </article>
       </section>
