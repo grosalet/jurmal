@@ -1,16 +1,20 @@
 :root { --font-geist: "Geist", system-ui, sans-serif; --font-inter: "Inter", system-ui, sans-serif; }
-html, body, #root { min-height: 100%; }
-body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-body, var(--font-inter)); }
+html, body, #root { min-height: 100%; margin: 0; }
+body { background: var(--background); color: var(--foreground); font-family: var(--font-body, var(--font-inter)); }
 
-/* Area cetak: hanya tampil saat window.print(). Warna kertas sengaja hitam di atas putih. */
+/* Dokumen laporan: warna kertas sengaja hitam di atas putih, bukan token tema. */
+.report { padding: 32px; background: white; color: black; font-size: 12px; line-height: 1.5; border-radius: 12px; min-width: 560px; }
+.report h2 { margin: 0 0 4px; text-align: center; font-size: 17px; font-weight: 500; color: darkred; text-transform: uppercase; }
+.report .meta { margin: 0 0 22px; text-align: center; color: dimgray; }
+.report table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.report .info td { padding: 4px 0; }
+.report .data { font-size: 11px; }
+.report .data th, .report .data td { border: 1px solid silver; padding: 10px; text-align: left; vertical-align: top; }
+.report .data th { background: mistyrose; color: darkred; font-weight: 500; }
+
 .printArea { display: none; }
 @media print {
   body > *:not(.printArea) { display: none !important; }
-  .printArea { display: block; padding: 30px; background: white; color: black; font-size: 12px; }
-  .printArea h2 { text-align: center; font-size: 18px; font-weight: 500; margin: 0 0 4px; }
-  .printArea .sub { text-align: center; color: dimgray; margin: 0 0 20px; }
-  .printArea table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 15px; }
-  .printArea th, .printArea td { border: 1px solid gray; padding: 8px; vertical-align: top; text-align: left; }
-  .printArea th { background: gainsboro; font-weight: 500; }
-  .printArea pre { margin: 0; font-family: inherit; white-space: pre-wrap; }
+  .printArea { display: block; }
+  .printArea .report { min-width: 0; border-radius: 0; padding: 0; }
 }
