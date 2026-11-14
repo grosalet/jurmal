@@ -40,6 +40,7 @@ const q = encodeURIComponent;
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const opts = (o: string | null) => (o || "").split(",").map((x) => x.trim()).filter(Boolean);
+const SISWA = "\u00A0siswa";
 const inert = { inert: "" } as Record<string, string>;
 
 type User = { UserID: string; Nama: string; Kelas?: string; Role: string; ID_Guru_Pengampu?: string };
@@ -352,23 +353,29 @@ function Guru({ user, onLogout }: { user: User; onLogout: () => void }) {
     catch { setSchema([]); }
   }, [user.UserID]);
 
+  const seq = useRef(0);
   const load = useCallback(async () => {
-    setLoading(true); setActive(null);
+    const my = ++seq.current;
+    const tgl = iso(tanggal);
+    const onDay = (v: unknown, day: string) => String(v).slice(0, 10) === day;
+    setLoading(true); setActive(null); setCache([]); setTrend([]);
     try {
       const siswa: User[] = (await sbFetch(`datapengguna?Role=eq.Siswa&ID_Guru_Pengampu=eq.${q(user.UserID)}&select=*`)) || [];
-      const jurnal: any[] = (await sbFetch(`jurnal_siswa?Tanggal=eq.${iso(tanggal)}&select=*`)) || [];
+      const jurnal: any[] = (await sbFetch(`jurnal_siswa?Tanggal=eq.${tgl}&select=*`)) || [];
+      if (my !== seq.current) return;
       const map: Record<string, any> = {};
-      jurnal.forEach((j) => { map[j.UserID] = j; });
+      jurnal.filter((j) => onDay(j.Tanggal, tgl)).forEach((j) => { map[j.UserID] = j; });
       const rows: Row[] = siswa.map((x) => { const j = map[x.UserID]; return { ...x, sudahIsi: !!j, jurnalData: j ? j.Answers : null, feedbackData: j ? { badge: j.FeedbackBadge, catatan: j.FeedbackCatatan } : null }; });
       setCache(rows);
       const dates = Array.from({ length: 7 }, (_, i) => new Date(tanggal.getFullYear(), tanggal.getMonth(), tanggal.getDate() - (6 - i)));
       const j7: any[] = rows.length ? (await sbFetch(`jurnal_siswa?Tanggal=gte.${iso(dates[0])}&Tanggal=lte.${iso(dates[6])}&select=UserID,Tanggal`)) || [] : [];
+      if (my !== seq.current) return;
       const ids = new Set(rows.map((r) => r.UserID));
       setTrend(dates.map((d) => ({
         key: iso(d), label: d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }), axisLabel: d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" }),
-        value: new Set(j7.filter((r) => r.Tanggal === iso(d) && ids.has(r.UserID)).map((r) => r.UserID)).size,
+        value: new Set(j7.filter((r) => onDay(r.Tanggal, iso(d)) && ids.has(r.UserID)).map((r) => r.UserID)).size,
       })));
-    } catch (err) { notify("Error", "Gagal memuat dashboard guru: " + msg(err), "error"); } finally { setLoading(false); }
+    } catch (err) { if (my === seq.current) notify("Error", "Gagal memuat dashboard guru: " + msg(err), "error"); } finally { if (my === seq.current) setLoading(false); }
   }, [user.UserID, tanggal, notify]);
 
   useEffect(() => { loadSchema(); }, [loadSchema]);
@@ -390,7 +397,7 @@ function Guru({ user, onLogout }: { user: User; onLogout: () => void }) {
   const selected = cache.find((x) => x.UserID === active);
   const heading = filter === "sudah" ? "Siswa sudah mengisi jurnal" : filter === "belum" ? "Siswa belum mengisi jurnal" : "Semua siswa binaan";
   const notif = belum > 0 ? { tone: "warning" as const, t: `Terdapat ${belum} siswa binaan belum menyerahkan jurnal pada tanggal terpilih.` }
-    : cache.length > 0 ? { tone: "success" as const, t: `Seluruh siswa binaan (${cache.length} siswa) telah mengisi jurnal hari ini.` }
+    : cache.length > 0 ? { tone: "success" as const, t: `Seluruh siswa binaan (${cache.length} siswa) telah mengisi jurnal pada tanggal ini.` }
     : { tone: "info" as const, t: "Belum ada siswa binaan terdaftar." };
   const icon = { size: 16, strokeWidth: 1.75, "aria-hidden": true } as const;
 
@@ -427,24 +434,29 @@ function Guru({ user, onLogout }: { user: User; onLogout: () => void }) {
           {tab === "dashboard" && (
             <>
               <section className={s.hero}>
-                <Badge tone="info">Guru wali dan pembina binaan</Badge>
-                <h1 className={s.h1}>Selamat datang, {user.Nama}!</h1>
-                {loading ? <Skeleton lines={1} label="Memuat data siswa binaan" /> : <Alert tone={notif.tone} title={notif.t} />}
+                <div className={s.heroText}>
+                  <p className={s.muted}>{tanggal.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+                  <h1 className={s.display}>Selamat datang, {user.Nama}</h1>
+                  {loading ? <Skeleton lines={1} label="Memuat data siswa binaan" /> : <Alert tone={notif.tone} title={notif.t} />}
+                </div>
+                <div className={s.heroStat}>
+                  <Progress label="Tingkat pengisian" value={sudah} max={Math.max(cache.length, 1)} showValue />
+                  <p className={s.muted}>{sudah} dari {cache.length} siswa mengisi pada tanggal ini</p>
+                </div>
               </section>
               <section className={s.kpis}>
-                <Tile onClick={() => go("siswa", "all")}><MetricCard label="Total siswa binaan" value={cache.length} suffix=" siswa" context="Siswa terdaftar" /></Tile>
-                <Tile onClick={() => go("siswa", "sudah")}><MetricCard label="Sudah mengisi jurnal" value={sudah} suffix=" siswa" context="Terkirim hari ini" /></Tile>
-                <Tile onClick={() => go("siswa", "belum")}><MetricCard label="Belum mengisi jurnal" value={belum} suffix=" siswa" context="Menunggu pengisian" /></Tile>
-                <Tile><div className={s.progressCard}><Progress label="Tingkat pengisian" value={sudah} max={Math.max(cache.length, 1)} showValue /><p className={s.muted}>Persentase kepatuhan harian ({pct}%)</p></div></Tile>
+                <Tile onClick={() => go("siswa", "all")}><MetricCard label="Total siswa binaan" value={cache.length} suffix={SISWA} context="Siswa terdaftar" /></Tile>
+                <Tile onClick={() => go("siswa", "sudah")}><MetricCard label="Sudah mengisi jurnal" value={sudah} suffix={SISWA} context="Terkirim pada tanggal ini" /></Tile>
+                <Tile onClick={() => go("siswa", "belum")}><MetricCard label="Belum mengisi jurnal" value={belum} suffix={SISWA} context="Menunggu pengisian" /></Tile>
               </section>
               <section className={s.charts}>
                 <article className={s.card}>
                   <h2 className={s.h3}>Tren pengisian jurnal (7 hari terakhir)</h2>
-                  <p className={s.muted}>Jumlah siswa yang sudah mengirimkan jurnal setiap hari.</p>
-                  {trend.length > 0 && <BarChart data={trend} label="Siswa sudah mengisi" period={`${trend[0].axisLabel} sampai ${trend[6].axisLabel}`} unit=" siswa" averageLabel="Rata-rata harian" valueLabel="Jumlah" categoryLabel="Hari" height={220} />}
+                  <p className={s.muted}>Jumlah siswa yang sudah mengirimkan jurnal pada setiap tanggal.</p>
+                  {trend.length > 0 && <BarChart data={trend} label="Siswa sudah mengisi" period={`${trend[0].axisLabel} sampai ${trend[6].axisLabel}`} unit={SISWA} averageLabel="Rata-rata harian" valueLabel="Jumlah" categoryLabel="Hari" height={220} />}
                 </article>
-                <article className={`${s.card} ${s.tinted}`}>
-                  <h2 className={s.h3}>Komposisi status hari ini</h2>
+                <article className={s.card}>
+                  <h2 className={s.h3}>Komposisi status pada tanggal terpilih</h2>
                   <p className={s.muted}>Rasio pengisian dan ringkasan evaluasi pembina.</p>
                   <DonutChart label="Status pengisian jurnal" unit="siswa" totalLabel="Total" emptyLabel="Belum ada pengisian" size={160} thickness={18}
                     data={[{ key: "sudah", label: "Sudah mengisi", value: sudah }, { key: "belum", label: "Belum mengisi", value: belum }]} />
