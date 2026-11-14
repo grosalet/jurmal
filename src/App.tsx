@@ -46,6 +46,30 @@ const inert = { inert: "" } as Record<string, string>;
 type User = { UserID: string; Nama: string; Kelas?: string; Role: string; ID_Guru_Pengampu?: string };
 type Field = { id: number; FieldID: string; Label: string; Type: string; Options: string | null };
 type Row = User & { sudahIsi: boolean; jurnalData: Record<string, string> | null; feedbackData: { badge?: string; catatan?: string } | null };
+const BADGES_SHORT = ["Sangat baik", "Konsisten", "Semangat luar biasa", "Perlu ditingkatkan", "Menunggu"];
+const GONE = "Pertanyaan yang sudah dihapus";
+
+function useVh() {
+  const [h, setH] = useState(() => window.innerHeight);
+  useEffect(() => { const f = () => setH(window.innerHeight); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
+  return h;
+}
+
+function useLabels(keys: string[], schema: Field[]) {
+  const [extra, setExtra] = useState<Record<string, string>>({});
+  const sig = keys.join(",");
+  useEffect(() => {
+    const missing = keys.filter((k) => !schema.some((f) => f.FieldID === k) && !(k in extra));
+    if (!missing.length) return;
+    sbFetch(`form_kustom_guru?FieldID=in.(${missing.map(q).join(",")})&select=FieldID,Label`).then((r) => {
+      const m: Record<string, string> = {};
+      (r || []).forEach((f: any) => { m[f.FieldID] = f.Label; });
+      setExtra((e) => ({ ...e, ...m }));
+    }).catch(() => {});
+  }, [sig, schema]);
+  return (k: string) => schema.find((f) => f.FieldID === k)?.Label ?? extra[k];
+}
+
 type Tab = "dashboard" | "siswa" | "form" | "print";
 type Filter = "all" | "sudah" | "belum";
 
@@ -103,8 +127,8 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <h1 className={s.h1}>Jurnal binaan</h1>
           <p className={s.muted}>SMP Maria Immaculata</p>
         </div>
-        <Input label="UserID pengguna" value={u} onChange={(e) => setU(e.target.value)} required autoComplete="username" placeholder="Masukkan UserID" />
-        <PasswordField label="Kata sandi" value={p} onChange={(e) => setP(e.target.value)} required autoComplete="current-password" placeholder="Masukkan kata sandi" messages={{ showPassword: "Tampilkan kata sandi", hidePassword: "Sembunyikan kata sandi" }} />
+        <div className={s.loginField}><Input label="UserID pengguna" value={u} onChange={(e) => setU(e.target.value)} required autoComplete="username" placeholder="Masukkan UserID" /></div>
+        <div className={s.loginField}><PasswordField label="Kata sandi" value={p} onChange={(e) => setP(e.target.value)} required autoComplete="current-password" placeholder="Masukkan kata sandi" messages={{ showPassword: "Tampilkan kata sandi", hidePassword: "Sembunyikan kata sandi" }} /></div>
         <Button type="submit" loading={busy}>Masuk</Button>
       </form>
     </section>
@@ -148,10 +172,11 @@ function Detail({ siswa, tanggal, user, schema, onSaved }: { siswa: Row; tanggal
     } catch (err) { notify("Gagal", msg(err), "error"); } finally { setBusy(false); }
   }
 
-  if (!siswa.sudahIsi) return <div className={s.empty}><EmptyState title="Belum mengisi jurnal" description={`${siswa.Nama} (${siswa.Kelas || "-"}) belum menyerahkan jurnal pada tanggal terpilih.`} /></div>;
   const answers = siswa.jurnalData || {};
   const keys = Object.keys(answers);
-  const title = (k: string, i: number) => { const x = schema.findIndex((f) => f.FieldID === k); return x >= 0 ? `${x + 1}. ${schema[x].Label}` : `${i + 1}. Pertanyaan (${k})`; };
+  const labelOf = useLabels(keys, schema);
+  if (!siswa.sudahIsi) return <div className={s.empty}><EmptyState title="Belum mengisi jurnal" description={`${siswa.Nama} (${siswa.Kelas || "-"}) belum menyerahkan jurnal pada tanggal terpilih.`} /></div>;
+  const title = (k: string, i: number) => `${i + 1}. ${labelOf(k) ?? GONE}`;
   return (
     <>
       <div className={s.panelHead}>
@@ -182,7 +207,7 @@ function Detail({ siswa, tanggal, user, schema, onSaved }: { siswa: Row; tanggal
         </div>
         <div className={s.feedbackRow}>
           <Textarea label="Catatan motivasi guru" rows={2} required value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Tuliskan apresiasi atau arahan baru untuk siswa..." />
-          <Button type="submit" loading={busy}>Simpan umpan balik</Button>
+          <div><Button type="submit" loading={busy}>Simpan umpan balik</Button></div>
         </div>
       </form>
     </>
@@ -259,7 +284,8 @@ function FormPage({ user, schema, reload }: { user: User; schema: Field[]; reloa
 }
 
 function Report({ siswa, guru, start, end, rows, schema }: { siswa?: Row; guru: string; start: string; end: string; rows: any[]; schema: Field[] }) {
-  const lab = (k: string, i: number) => { const x = schema.findIndex((f) => f.FieldID === k); return x >= 0 ? `${x + 1}. ${schema[x].Label}` : `${i + 1}. ${k}`; };
+  const labelOf = useLabels(Array.from(new Set(rows.flatMap((r) => Object.keys(r.Answers || {})))), schema);
+  const lab = (k: string, i: number) => `${i + 1}. ${labelOf(k) ?? GONE}`;
   return (
     <div className="report">
       <h2>Rekapitulasi jurnal karakter dan aktivitas siswa</h2>
@@ -337,6 +363,7 @@ function PrintPage({ cache, schema, user }: { cache: Row[]; schema: Field[]; use
 function Guru({ user, onLogout }: { user: User; onLogout: () => void }) {
   const notify = useNotify();
   const mainRef = useRef<HTMLElement>(null);
+  const vh = useVh();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [filter, setFilter] = useState<Filter>("all");
   const [menu, setMenu] = useState(false);
@@ -432,13 +459,13 @@ function Guru({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
         <main ref={mainRef} className={s.main}>
           {tab === "dashboard" && (
-            <>
+            <div className={s.dash}>
               <section className={s.hero}>
                 <div className={s.heroText}>
                   <p className={s.muted}>{tanggal.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
                   <h1 className={s.display}>Selamat datang, {user.Nama}</h1>
-                  {loading ? <Skeleton lines={1} label="Memuat data siswa binaan" /> : <Alert tone={notif.tone} title={notif.t} />}
                 </div>
+                <div className={s.heroAlert}>{loading ? <Skeleton lines={1} label="Memuat data siswa binaan" /> : <Alert tone={notif.tone} title={notif.t} />}</div>
                 <div className={s.heroStat}>
                   <Progress label="Tingkat pengisian" value={sudah} max={Math.max(cache.length, 1)} showValue />
                   <p className={s.muted}>{sudah} dari {cache.length} siswa mengisi pada tanggal ini</p>
@@ -451,22 +478,19 @@ function Guru({ user, onLogout }: { user: User; onLogout: () => void }) {
               </section>
               <section className={s.charts}>
                 <article className={s.card}>
-                  <h2 className={s.h3}>Tren pengisian jurnal (7 hari terakhir)</h2>
-                  <p className={s.muted}>Jumlah siswa yang sudah mengirimkan jurnal pada setiap tanggal.</p>
-                  {trend.length > 0 && <BarChart data={trend} label="Siswa sudah mengisi" period={`${trend[0].axisLabel} sampai ${trend[6].axisLabel}`} unit={SISWA} averageLabel="Rata-rata harian" valueLabel="Jumlah" categoryLabel="Hari" height={220} />}
+                  <div><h2 className={s.h3}>Tren pengisian jurnal (7 hari terakhir)</h2><p className={s.muted}>Jumlah siswa yang sudah mengirimkan jurnal pada setiap tanggal.</p></div>
+                  {trend.length > 0 && <BarChart data={trend} label="Siswa sudah mengisi" period={`${trend[0].axisLabel} sampai ${trend[6].axisLabel}`} unit={SISWA} averageLabel="Rata-rata harian" valueLabel="Jumlah" categoryLabel="Hari" height={Math.max(100, Math.min(240, vh - 470))} />}
                 </article>
                 <article className={s.card}>
-                  <h2 className={s.h3}>Komposisi status pada tanggal terpilih</h2>
-                  <p className={s.muted}>Rasio pengisian dan ringkasan evaluasi pembina.</p>
-                  <DonutChart label="Status pengisian jurnal" unit="siswa" totalLabel="Total" emptyLabel="Belum ada pengisian" size={160} thickness={18}
+                  <div><h2 className={s.h3}>Komposisi status pada tanggal terpilih</h2><p className={s.muted}>Rasio pengisian dan ringkasan evaluasi pembina.</p></div>
+                  <DonutChart label="Status pengisian jurnal" unit="siswa" totalLabel="Total" emptyLabel="Belum ada pengisian" size={128} thickness={16}
                     data={[{ key: "sudah", label: "Sudah mengisi", value: sudah }, { key: "belum", label: "Belum mengisi", value: belum }]} />
-                  <h3 className={s.h3}>Status umpan balik guru</h3>
                   <div className={s.fbGrid}>
-                    {[...BADGES, "Menunggu penilaian"].map((b, i) => <div key={b} className={s.fbTile}><strong>{fbCount[i]}</strong><small>{b}</small></div>)}
+                    {BADGES_SHORT.map((b, i) => <div key={b} className={s.fbTile}><strong>{fbCount[i]}</strong><small>{b}</small></div>)}
                   </div>
                 </article>
               </section>
-            </>
+            </div>
           )}
 
           {tab === "siswa" && (
